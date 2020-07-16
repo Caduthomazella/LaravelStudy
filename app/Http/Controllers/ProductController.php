@@ -3,16 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreUpdateProductRequest;
+use App\Models\Product;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
 
     protected $request;
+    private $repository;
 
-    public function __construct(Request $request)
+    public function __construct(Request $request, Product $product)
     {
         $this->request = $request;
+        $this->repository = $product;
 
         // $this->middleware('auth')->except([
         //     'index', 'show'
@@ -27,9 +30,11 @@ class ProductController extends Controller
      */
     public function index()
     {
-        $teste = 123;
+        $products = Product::latest()->paginate(8);
 
-        return view('admin.pages.products.index', compact('teste'));
+        return view('admin.pages.products.index', [
+            'products' => $products,
+        ]);
     }
 
     /**
@@ -50,23 +55,17 @@ class ProductController extends Controller
      */
     public function store(StoreUpdateProductRequest $request)
     {
-        dd('OK');
+        $data = $request->only('name', 'description', 'price');
 
-        // $request->validate([
-        //     'name' => 'required|min:3|max:255',
-        //     'description' => 'nullable|min:5|max:10000',
-        //     'photo' => 'required|image',
-        // ]);
+        if($request->hasFile('image') && $request->image->isValid()) {
+            $imagePath = $request->image->store('products');
 
-        // EXEMPLOS DE REQUEST com Die Dump
-        // dd($request->all());
-        // dd($request->name);
-        // dd($request->only(['name', 'description']));
-        // dd($request->input('teste', 'default'));
-        // dd($request->except('_token', 'name'));
-        if ($request->file('photo')->isValid()) {
-            // dd($request->file('photo')->store('products'));
+            $data['image'] = $imagePath;
         }
+
+        $this->repository->create($data);
+
+        return redirect()->route('products.index');
     }
 
     /**
@@ -77,7 +76,12 @@ class ProductController extends Controller
      */
     public function show($id)
     {
-        
+        // $product = $Product::where('id', $id)->first();
+        $product = $this->repository->find($id);
+
+        return view('admin.pages.products.show', [
+            'products' => $product
+        ]);
     }
 
     /**
@@ -88,19 +92,27 @@ class ProductController extends Controller
      */
     public function edit($id)
     {
-        return view('admin.pages.products.edit', compact('id'));
+        if (!$product = $this->repository->find($id))
+            return redirect()->back();
+        
+        return view('admin.pages.products.edit', compact('product'));
     }
 
     /**
      * Update the specified resource in storage.
      *
-     * @param  \Illuminate\Http\Request  $request
+     * @param  App\Http\Requests\StoreUpdateProductRequest  $request
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function update(Request $request, $id)
+    public function update(StoreUpdateProductRequest $request, $id)
     {
-        dd("Editando o produto {$id}");
+        if (!$product = $this->repository->find($id))
+            return redirect()->back();
+
+        $product->update($request->all());
+
+        return redirect()->route('products.index');
     }
 
     /**
@@ -111,6 +123,25 @@ class ProductController extends Controller
      */
     public function destroy($id)
     {
-        //
+        if (!$product = $this->repository->find($id))
+            return redirect()->back();
+
+        $product->delete();
+        return redirect()->route('products.index');
+    }
+
+    /**
+     * Search Products
+     */
+    public function search(Request $request)
+    {
+        $filters = $request->except('_token');
+
+        $products = $this->repository->search($request->filter);
+
+        return view('admin.pages.products.index', [
+            'products' => $products,
+            'filters' => $filters,
+        ]);
     }
 }
